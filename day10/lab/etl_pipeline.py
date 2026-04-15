@@ -46,9 +46,20 @@ def _log(path: Path, line: str) -> None:
         f.write(line + "\n")
 
 
+def _to_manifest_path(path: Path, root: Path) -> str:
+    """
+    Trả path relative nếu file nằm trong project root, ngược lại trả absolute path.
+    Tránh lỗi ValueError khi dùng relative_to() với path ngoài repo.
+    """
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%MZ")
-    raw_path = Path(args.raw)
+    raw_path = Path(args.raw).resolve()
     if not raw_path.is_file():
         print(f"ERROR: raw file not found: {raw_path}", file=sys.stderr)
         return 1
@@ -84,13 +95,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     for r in results:
         sym = "OK" if r.passed else "FAIL"
         log(f"expectation[{r.name}] {sym} ({r.severity}) :: {r.detail}")
+
     if halt and not args.skip_validate:
         log("PIPELINE_HALT: expectation suite failed (halt).")
         return 2
+
     if halt and args.skip_validate:
         log("WARN: expectation failed but --skip-validate → tiếp tục embed (chỉ dùng cho demo Sprint 3).")
 
-    # Embed
     embed_ok = cmd_embed_internal(
         cleaned_path,
         run_id=run_id,
@@ -106,7 +118,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     manifest = {
         "run_id": run_id,
         "run_timestamp": datetime.now(timezone.utc).isoformat(),
-        "raw_path": str(raw_path.relative_to(ROOT)),
+        "raw_path": _to_manifest_path(raw_path, ROOT),
         "raw_records": raw_count,
         "cleaned_records": len(cleaned),
         "quarantine_records": len(quarantine),
@@ -114,16 +126,22 @@ def cmd_run(args: argparse.Namespace) -> int:
         "no_refund_fix": bool(args.no_refund_fix),
         "skipped_validate": bool(args.skip_validate and halt),
         "cleaned_csv": str(cleaned_path.relative_to(ROOT)),
+        "quarantine_csv": str(quar_path.relative_to(ROOT)),
         "chroma_path": os.environ.get("CHROMA_DB_PATH", "./chroma_db"),
         "chroma_collection": os.environ.get("CHROMA_COLLECTION", "day10_kb"),
     }
+
     man_path = MAN_DIR / f"manifest_{run_id.replace(':', '-')}.json"
     man_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"manifest_written={man_path.relative_to(ROOT)}")
 
-    status, fdetail = check_manifest_freshness(man_path, sla_hours=float(os.environ.get("FRESHNESS_SLA_HOURS", "24")))
+    status, fdetail = check_manifest_freshness(
+        man_path,
+        sla_hours=float(os.environ.get("FRESHNESS_SLA_HOURS", "24")),
+    )
     log(f"freshness_check={status} {json.dumps(fdetail, ensure_ascii=False)}")
 
+    # Freshness hiện là monitoring signal, chưa block pipeline.
     log("PIPELINE_OK")
     return 0
 
@@ -152,6 +170,7 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
     col = client.get_or_create_collection(name=collection_name, embedding_function=emb)
 
     ids = [r["chunk_id"] for r in rows]
+
     # Tránh “mồi cũ” trong top-k: xóa id không còn trong cleaned run này (index = snapshot publish).
     try:
         prev = col.get(include=[])
@@ -162,6 +181,7 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
             log(f"embed_prune_removed={len(drop)}")
     except Exception as e:
         log(f"WARN: embed prune skip: {e}")
+
     documents = [r["chunk_text"] for r in rows]
     metadatas = [
         {
@@ -171,6 +191,7 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
         }
         for r in rows
     ]
+
     # Idempotent: upsert theo chunk_id
     col.upsert(ids=ids, documents=documents, metadatas=metadatas)
     log(f"embed_upsert count={len(ids)} collection={collection_name}")
@@ -178,10 +199,11 @@ def cmd_embed_internal(cleaned_csv: Path, *, run_id: str, log) -> bool:
 
 
 def cmd_freshness(args: argparse.Namespace) -> int:
-    p = Path(args.manifest)
+    p = Path(args.manifest).resolve()
     if not p.is_file():
         print(f"manifest not found: {p}", file=sys.stderr)
         return 1
+
     sla = float(os.environ.get("FRESHNESS_SLA_HOURS", "24"))
     status, detail = check_manifest_freshness(p, sla_hours=sla)
     print(status, json.dumps(detail, ensure_ascii=False))
