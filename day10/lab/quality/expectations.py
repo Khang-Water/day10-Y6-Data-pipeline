@@ -1,4 +1,5 @@
 """
+Võ Thanh Chung - 2A202600335
 Expectation suite đơn giản (không bắt buộc Great Expectations).
 
 Sinh viên có thể thay bằng GE / pydantic / custom — miễn là có halt có kiểm soát.
@@ -109,6 +110,44 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
             ok6,
             "halt",
             f"violations={len(bad_hr_annual)}",
+        )
+    )
+
+    # E7: không có chunk_id trùng nhau — bảo vệ idempotency của Chroma upsert
+    # Nếu 2 chunk có cùng chunk_id mà nội dung khác nhau, Chroma sẽ overwrite
+    # lặng lẽ → sai dữ liệu khi retrieval. Đặt halt để dừng pipeline ngay.
+
+    chunk_ids = [r.get("chunk_id") or "" for r in cleaned_rows]
+    seen_ids: set = set()
+    dup_ids: list = []
+
+    for cid in chunk_ids:
+        if cid in seen_ids:
+            dup_ids.append(cid)
+        seen_ids.add(cid)
+
+    ok7 = len(dup_ids) == 0
+    results.append(
+        ExpectationResult(
+            "no_duplicate_chunk_id",
+            ok7,
+            "halt",
+            f"duplicate_chunk_ids={len(dup_ids)}",
+        )
+    )
+
+    # E8: exported_at không được rỗng — cần cho freshness check ở monitoring/
+    # Nếu rỗng, freshness_check.py không tính được SLA → WARN thay vì halt
+    # vì pipeline vẫn chạy được, nhưng monitoring mất dữ liệu.
+
+    missing_export_ts = [r for r in cleaned_rows if not (r.get("exported_at") or "").strip()]
+    ok8 = len(missing_export_ts) == 0
+    results.append(
+        ExpectationResult(
+            "exported_at_not_empty",
+            ok8,
+            "warn",
+            f"missing_exported_at={len(missing_export_ts)}",
         )
     )
 
