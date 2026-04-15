@@ -4,13 +4,15 @@
 **Thành viên:**
 | Tên | Vai trò (Day 10) | Email |
 |-----|------------------|-------|
-| ___ | Ingestion / Raw Owner | ___ |
-| ___ | Cleaning & Quality Owner | ___ |
-| ___ | Embed & Idempotency Owner | ___ |
-| ___ | Monitoring / Docs Owner | ___ |
+| Hoàng Thị Thanh Tuyền | Pipeline Coordinator & Ingestion Owner | hoangthanhtuyen1412@gmail.com |
+| Nguyễn Hồ Bảo Thiên | Cleaning & Quality Owner | thiennguyen3703@gmail.com |
+| Võ Thanh Chung | Quality / Expectations Owner | 	vothanhchung95@gmail.com |
+| Dương Khoa Điềm | Embed & Idempotency Owner | duongkhoadiemp@gmail.com |
+| Đỗ Thế Anh | Eval & Inject (Before/After) Owner | anh.dothe47@gmail.com |
+| Lê Minh Khang | Monitoring / Docs Owner | minhkhangle2k4@gmail.com |
 
-**Ngày nộp:** ___________  
-**Repo:** ___________  
+**Ngày nộp:** 4/15/2026
+**Repo:** https://github.com/Khang-Water/day10-Y6-Data-pipeline
 **Độ dài khuyến nghị:** 600–1000 từ
 
 ---
@@ -38,6 +40,13 @@ _________________
 ## 2. Cleaning & expectation (150–200 từ)
 
 > Baseline đã có nhiều rule (allowlist, ngày ISO, HR stale, refund, dedupe…). Nhóm thêm **≥3 rule mới** + **≥2 expectation mới**. Khai báo expectation nào **halt**.
+
+
+Rule 1 (Mới): Phát hiện tàn dư lỗi từ quá trình trích xuất PDF/Word (Broken Artifacts).
+    
+Rule 2: Phát hiện và làm sạch mã định dạng / HTML tags thừa (Format Stripping).
+Rule 3: Phát hiện rò rỉ dữ liệu nhạy cảm cá nhân (PII - Personally Identifiable Information).
+    
 
 ### 2a. Bảng metric_impact (bắt buộc — chống trivial)
 
